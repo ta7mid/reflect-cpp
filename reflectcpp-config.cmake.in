@@ -28,7 +28,7 @@ if (NOT REFLECTCPP_USE_BUNDLED_DEPENDENCIES)
 endif()
 
 if ((REFLECTCPP_JSON OR REFLECTCPP_AVRO OR REFLECTCPP_CBOR OR REFLECTCPP_UBJSON) AND NOT REFLECTCPP_USE_BUNDLED_DEPENDENCIES)
-  find_dependency(yyjson)
+  find_dependency(yyjson)  
 endif()
 
 if (REFLECTCPP_BOOST_SERIALIZATION)  
@@ -60,14 +60,12 @@ if (REFLECTCPP_FLEXBUFFERS)
 endif ()
 
 if (REFLECTCPP_MSGPACK)
-  find_dependency(msgpack-c NAMES msgpack-c msgpack msgpackc)
+  find_dependency(msgpack-c NAMES msgpack msgpack-c msgpackc)
 endif()
 
 if (REFLECTCPP_PARQUET)
   find_dependency(Arrow)
-  if (NOT TARGET Parquet::parquet_static AND NOT TARGET Parquet::parquet_shared)
-    find_dependency(Parquet)
-  endif()
+  find_package(Parquet QUIET)
 endif()
 
 if (REFLECTCPP_TOML)

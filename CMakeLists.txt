@@ -168,7 +168,6 @@ if (REFLECTCPP_USE_VCPKG)
     if (REFLECTCPP_YAML OR REFLECTCPP_CHECK_HEADERS)
         list(APPEND VCPKG_MANIFEST_FEATURES "yaml")
     endif()
-
     
     if (REFLECTCPP_YAS OR REFLECTCPP_CHECK_HEADERS)
         list(APPEND VCPKG_MANIFEST_FEATURES "yas")
@@ -188,10 +187,8 @@ endif()
 if (REFLECTCPP_BUILD_SHARED)
     add_library(reflectcpp SHARED)
     set_target_properties(reflectcpp PROPERTIES SOVERSION ${PROJECT_VERSION})
-    set(preferred_lib_type shared)
 else()
     add_library(reflectcpp STATIC)
-    set(preferred_lib_type static)
 endif()
 
 add_library(reflectcpp::reflectcpp ALIAS reflectcpp)
@@ -277,6 +274,16 @@ if (_REFLECTCPP_NEEDS_JSON_IMPL)
     endif ()
 endif ()
 
+function(set_to_first_defined_target result)
+    foreach(target IN LISTS ARGN)
+        if(TARGET "${target}")
+            set(${result} "${target}" PARENT_SCOPE)
+            return()
+        endif()
+    endforeach()
+    set(${result} "" PARENT_SCOPE)
+endfunction()
+
 if (REFLECTCPP_AVRO OR REFLECTCPP_CHECK_HEADERS)
     list(APPEND REFLECT_CPP_SOURCES
         src/reflectcpp_avro.cpp
@@ -314,18 +321,21 @@ if (REFLECTCPP_BSON OR REFLECTCPP_CHECK_HEADERS)
     list(APPEND REFLECT_CPP_SOURCES
         src/reflectcpp_bson.cpp
     )
-
-    # The package and target names have changed since v2: https://github.com/mongodb/mongo-c-driver/releases/tag/2.0.0
-    # bson-1.0 is for compatibility with older versions
-    find_package(bson 1.25.1 CONFIG REQUIRED NAMES bson bson-1.0)
-
-    set(bson_lib bson::${preferred_lib_type})
-    if(NOT TARGET "${bson_lib}")
-        # fallback to old target name
-        set(bson_lib mongo::bson_${preferred_lib_type})
-    endif()
-
-    target_link_libraries(reflectcpp PUBLIC "${bson_lib}")
+    if (
+        NOT TARGET bson::static AND
+        NOT TARGET bson::shared AND
+        NOT TARGET mongo::bson_static AND
+        NOT TARGET mongo::bson_shared
+    )
+        find_package(bson CONFIG REQUIRED NAMES bson bson-1.0)
+    endif ()
+    set_to_first_defined_target(BSON_LIB
+        bson::static
+        mongo::bson_static
+        bson::shared
+        mongo::bson_shared
+    )
+    target_link_libraries(reflectcpp PUBLIC ${BSON_LIB})
 endif ()
 
 if (REFLECTCPP_CAPNPROTO OR REFLECTCPP_CHECK_HEADERS)
@@ -335,11 +345,8 @@ if (REFLECTCPP_CAPNPROTO OR REFLECTCPP_CHECK_HEADERS)
     if (NOT TARGET CapnProto)
         find_package(CapnProto CONFIG REQUIRED)
     endif ()
-    set(CAPNPC_LIB CapnProto::capnpc)
-    if (NOT TARGET CapnProto::capnpc)
-      # in some old versions, there is no alias target CapnProto::capnpc, fallback to capnc
-      set(CAPNPC_LIB capnpc)
-    endif()
+    # in some old versions, there is no alias target CapnProto::capnpc, fallback to capnc
+    set_to_first_defined_target(CAPNPC_LIB CapnProto::capnpc capnpc)
     target_link_libraries(reflectcpp PUBLIC CapnProto::kj CapnProto::capnp ${CAPNPC_LIB} CapnProto::kj-gzip)
 endif ()
 
@@ -364,94 +371,63 @@ if (REFLECTCPP_CEREAL OR REFLECTCPP_CHECK_HEADERS)
 endif()
 
 if (REFLECTCPP_CSV OR REFLECTCPP_CHECK_HEADERS)
-    find_package(Arrow CONFIG REQUIRED)
-
-    if(TARGET Arrow::arrow_${preferred_lib_type})
-        set(arrow_lib Arrow::arrow_${preferred_lib_type})
-    elseif(TARGET Arrow::arrow_static)
-        set(arrow_lib Arrow::arrow_static)
-    elseif(TARGET Arrow::arrow_shared)
-        set(arrow_lib Arrow::arrow_shared)
-    elseif(TARGET arrow::arrow)
-        # Conan generates this target name
-        set(arrow_lib arrow::arrow)
-    else()
-        message(FATAL_ERROR "Could not find an Arrow imported target")
+    if (NOT TARGET Arrow)
+        find_package(Arrow CONFIG REQUIRED)
     endif()
-
-    target_link_libraries(reflectcpp PUBLIC "${arrow_lib}")
+    set_to_first_defined_target(ARROW_LIB
+        $<IF:$<BOOL:${ARROW_BUILD_STATIC}>,Arrow::arrow_static,Arrow::arrow_shared>
+        Arrow
+        arrow::arrow
+    )
+    target_link_libraries(reflectcpp PUBLIC ${ARROW_LIB})
 endif()
 
 if (REFLECTCPP_FLEXBUFFERS OR REFLECTCPP_CHECK_HEADERS)
     list(APPEND REFLECT_CPP_SOURCES
         src/reflectcpp_flexbuf.cpp
     )
+    if (NOT TARGET flatbuffers::flatbuffers)
+        find_package(flatbuffers CONFIG REQUIRED)
+    endif ()
+    set_to_first_defined_target(FLATBUF_LIB flatbuffers::flatbuffers flatbuffers::flatbuffers_shared)
+    target_link_libraries(reflectcpp PUBLIC ${FLATBUF_LIB})
+endif ()
 
-    find_package(flatbuffers CONFIG REQUIRED)
-
-    if(REFLECTCPP_BUILD_SHARED AND TARGET flatbuffers::flatbuffers_shared)
-        set(flatbuf_lib flatbuffers::flatbuffers_shared)
-    else()
-        set(flatbuf_lib flatbuffers::flatbuffers)
-    endif()
-
-    target_link_libraries(reflectcpp PUBLIC "${flatbuf_lib}")
-endif()
-
-if(REFLECTCPP_MSGPACK OR REFLECTCPP_CHECK_HEADERS)
+if (REFLECTCPP_MSGPACK OR REFLECTCPP_CHECK_HEADERS)
     list(APPEND REFLECT_CPP_SOURCES
         src/reflectcpp_msgpack.cpp
     )
-
-    find_package(msgpack-c CONFIG REQUIRED NAMES msgpack-c msgpack msgpackc)
-
-    if(NOT REFLECTCPP_BUILD_SHARED AND TARGET msgpack-c-static)
-        set(msgpack_lib msgpack-c-static)
-    else()
-        set(msgpack_lib msgpack-c)
+    if (NOT TARGET msgpack-c)
+        find_package(msgpack-c CONFIG REQUIRED NAMES msgpack msgpack-c msgpackc)
     endif()
-
-    target_link_libraries(reflectcpp PUBLIC "${msgpack_lib}")
-endif()
+    set_to_first_defined_target(MSGPACK_LIB
+        msgpack-c
+        msgpackc
+        msgpack-c-static
+    )
+    target_link_libraries(reflectcpp PUBLIC ${MSGPACK_LIB})
+endif ()
 
 if (REFLECTCPP_PARQUET OR REFLECTCPP_CHECK_HEADERS)
-    # Ensure Arrow is found
-    if(NOT DEFINED arrow_lib)
+    if (NOT DEFINED ARROW_LIB)
         find_package(Arrow CONFIG REQUIRED)
-
-        if(TARGET Arrow::arrow_${preferred_lib_type})
-            set(arrow_lib Arrow::arrow_${preferred_lib_type})
-        elseif(TARGET Arrow::arrow_static)
-            set(arrow_lib Arrow::arrow_static)
-        elseif(TARGET Arrow::arrow_shared)
-            set(arrow_lib Arrow::arrow_shared)
-        elseif(TARGET arrow::arrow)
-            # Conan generates this target name
-            set(arrow_lib arrow::arrow)
-        else()
-            message(FATAL_ERROR "Could not find an Arrow imported target")
-        endif()
+        set_to_first_defined_target(ARROW_LIB
+            $<IF:$<BOOL:${ARROW_BUILD_STATIC}>,Arrow::arrow_static,Arrow::arrow_shared>
+            Arrow
+            arrow::arrow
+        )
     endif()
 
-    # Try to find Parquet as a separate package (vcpkg, system installs).
-    # On Conan, Parquet targets may already be available through the Arrow package.
-    if(NOT TARGET Parquet::parquet_static AND NOT TARGET Parquet::parquet_shared)
+    if (NOT TARGET Parquet)
         find_package(Parquet CONFIG QUIET)
     endif()
+    set_to_first_defined_target(PARQUET_LIB
+        $<IF:$<BOOL:${ARROW_BUILD_STATIC}>,Parquet::parquet_static,Parquet::parquet_shared>
+        Parquet
+        arrow::parquet
+    )
 
-    # Determine the Parquet target to use
-    if(TARGET Parquet::parquet_${preferred_lib_type})
-        set(parquet_lib Parquet::parquet_${preferred_lib_type})
-    elseif(TARGET Parquet::parquet_static)
-        set(parquet_lib Parquet::parquet_static)
-    elseif(TARGET Parquet::parquet_shared)
-        set(parquet_lib Parquet::parquet_shared)
-    endif()
-
-    target_link_libraries(reflectcpp PUBLIC "${arrow_lib}")
-    if(DEFINED parquet_lib)
-        target_link_libraries(reflectcpp PUBLIC "${parquet_lib}")
-    endif()
+    target_link_libraries(reflectcpp PUBLIC ${ARROW_LIB} ${PARQUET_LIB})
 endif()
 
 if(REFLECTCPP_TOML OR REFLECTCPP_CHECK_HEADERS)
