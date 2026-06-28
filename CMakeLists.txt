@@ -340,6 +340,8 @@ if (REFLECTCPP_CAPNPROTO OR REFLECTCPP_CHECK_HEADERS)
       # in some old versions, there is no alias target CapnProto::capnpc, fallback to capnc
       set(CAPNPC_LIB capnpc)
     endif()
+    target_link_libraries(reflectcpp PUBLIC CapnProto::kj CapnProto::capnp ${CAPNPC_LIB} CapnProto::kj-gzip)
+endif ()
 
 if (REFLECTCPP_CBOR OR REFLECTCPP_CHECK_HEADERS)
     list(APPEND REFLECT_CPP_SOURCES
