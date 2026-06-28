@@ -6,7 +6,7 @@ site_url: https://rfl.getml.com/
 site_author: Code17 GmbH
 site_description: >-
   A C++20 library for fast serialization, deserialization and validation using reflection. 
-  Supports JSON, AVRO, BSON, Cap'n Proto, CBOR, CSV, flexbuffers, msgpack, parquet, TOML, UBJSON, XML, YAML 
+  Supports JSON, AVRO, BSON, Boost Serialization, Cap'n Proto, CBOR, Cereal, CSV, flexbuffers, msgpack, parquet, TOML, UBJSON, XML, YAML, yas 
 
 theme:
   name: "material"
@@ -93,9 +93,11 @@ nav:
   #    # - Errors handling: concepts/errors.md
   - Supported Formats:
       - Avro: supported_formats/avro.md
+      - Boost Serialization: supported_formats/boost_serialization.md
       - BSON: supported_formats/bson.md
       - Cap'n Proto: supported_formats/capnproto.md
       - CBOR: supported_formats/cbor.md
+      - Cereal: supported_formats/cereal.md
       - CSV: supported_formats/csv.md
       - FlexBuffers: supported_formats/flexbuffers.md
       - JSON: supported_formats/json.md
@@ -105,6 +107,7 @@ nav:
       - UBJSON: supported_formats/ubjson.md
       - XML: supported_formats/xml.md
       - YAML: supported_formats/yaml.md
+      - yas: supported_formats/yas.md
       - Custom Format: supported_formats/supporting_your_own_format.md
   # - Reflective Programming: ./reflective_programming.md
   - Installation: install.md
@@ -123,6 +126,7 @@ nav:
       - rfl::Box and rfl::Ref: rfl_ref.md
       - rfl::Timestamp: timestamps.md
       - rfl::Skip: rfl_skip.md
+      - rfl::Commented: commented.md
       - rfl::Result: result.md
       - Standard containers: standard_containers.md
       - C arrays and inheritance: c_arrays_and_inheritance.md
@@ -135,6 +139,7 @@ nav:
       - Composing validators: composing_validators.md
       - Size validation: size_validation.md
       - JSON schema: json_schema.md
+      - Enum descriptions: enum_descriptions.md
     - Generic elements:
       - rfl::Object: object.md
       - rfl::Generic: generic.md
