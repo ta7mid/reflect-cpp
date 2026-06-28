@@ -38,6 +38,7 @@ reflect-cpp and sqlgen fill important gaps in C++ development. They reduce boile
     - [Simple Example](#simple-example)
     - [More Comprehensive Example](#more-comprehensive-example)
     - [Tabular data](#tabular-data)
+    - [CLI argument parsing](#cli-argument-parsing)
     - [Error messages](#error-messages)
     - [JSON schema](#json-schema)
     - [Enums](#enums)
@@ -65,9 +66,11 @@ The following table lists the serialization formats currently supported by refle
 |--------------|------------------------------------------------------|--------------|------------| -----------------------------------------------------|
 | JSON         | [yyjson](https://github.com/ibireme/yyjson)          | >= 0.8.0     | MIT        | out-of-the-box support, included in this repository  |
 | Avro         | [avro-c](https://avro.apache.org/docs/1.11.1/api/c/) | >= 1.11.3    | Apache 2.0 | Schemaful binary format                              |
+| Boost.Serialization | [Boost.Serialization](https://www.boost.org/doc/libs/release/libs/serialization/) | >= 1.74.0 | BSL 1.0 | Streaming binary format with archive interop |
 | BSON         | [libbson](https://github.com/mongodb/mongo-c-driver) | >= 1.25.1    | Apache 2.0 | JSON-like binary format                              |
 | Cap'n Proto  | [capnproto](https://capnproto.org)                   | >= 1.0.2     | MIT        | Schemaful binary format                              |
 | CBOR         | [jsoncons](https://github.com/danielaparker/jsoncons)| >= 0.176.0   | BSL 1.0    | JSON-like binary format                              |
+| Cereal       | [Cereal](https://uscilab.github.io/cereal/)          | >= 1.3.2     | BSD        | C++ serialization library with multiple formats      |
 | CSV          | [Apache Arrow](https://arrow.apache.org/)            | >= 21.0.0    | Apache 2.0 | Tabular textual format                               |
 | flexbuffers  | [flatbuffers](https://github.com/google/flatbuffers) | >= 23.5.26   | Apache 2.0 | Schema-less version of flatbuffers, binary format    |
 | msgpack      | [msgpack-c](https://github.com/msgpack/msgpack-c)    | >= 6.0.0     | BSL 1.0    | JSON-like binary format                              |
@@ -76,6 +79,7 @@ The following table lists the serialization formats currently supported by refle
 | UBJSON       | [jsoncons](https://github.com/danielaparker/jsoncons)| >= 0.176.0   | BSL 1.0    | JSON-like binary format                              |
 | XML          | [pugixml](https://github.com/zeux/pugixml)           | >= 1.14      | MIT        | Textual format used in many legacy projects          |
 | YAML         | [yaml-cpp](https://github.com/jbeder/yaml-cpp)       | >= 0.8.0     | MIT        | Textual format with an emphasis on readability       |
+| yas          | [yas](https://github.com/niXman/yas)                 | >= 7.1.0     | BSL 1.0    | Very fast and compact serialization library          |
 
 Support for more serialization formats is in development. Refer to the [issues](https://github.com/getml/reflect-cpp/issues) for details.
 
@@ -154,21 +158,25 @@ rfl::avro::write(homer);
 rfl::bson::write(homer);
 rfl::capnproto::write(homer);
 rfl::cbor::write(homer);
+rfl::cereal::write(homer);
 rfl::flexbuf::write(homer);
 rfl::msgpack::write(homer);
 rfl::toml::write(homer);
 rfl::ubjson::write(homer);
 rfl::xml::write(homer);
+rfl::yas::write(homer);
 
 rfl::avro::read<Person>(avro_bytes);
 rfl::bson::read<Person>(bson_bytes);
 rfl::capnproto::read<Person>(capnproto_bytes);
 rfl::cbor::read<Person>(cbor_bytes);
+rfl::cereal::read<Person>(cereal_bytes);
 rfl::flexbuf::read<Person>(flexbuf_bytes);
 rfl::msgpack::read<Person>(msgpack_bytes);
 rfl::toml::read<Person>(toml_string);
 rfl::ubjson::read<Person>(ubjson_bytes);
 rfl::xml::read<Person>(xml_string);
+rfl::yas::read<Person>(yas_bytes);
 ```
 
 ### More Comprehensive Example
@@ -292,6 +300,43 @@ This will resulting CSV will look like this:
 "Homer","Simpson","Springfield",1987-04-19,45,"homer@simpson.com"
 ```
 
+### CLI argument parsing
+
+reflect-cpp can also parse command-line arguments directly into structs using `rfl::cli::read`:
+
+```cpp
+#include <rfl/cli.hpp>
+
+struct Config {
+  std::string host_name;
+  int port;
+  bool verbose;
+  std::vector<std::string> tags;
+};
+
+int main(int argc, char* argv[]) {
+  const auto config = rfl::cli::read<Config>(argc, argv).value();
+  // ./app --host-name=localhost --port=8080 --verbose --tags=a,b,c
+}
+```
+
+Field names are automatically converted from `snake_case` to `kebab-case` (`host_name` matches `--host-name`).
+
+You can mark fields as positional arguments with `rfl::Positional<T>` and add single-character aliases with `rfl::Short<"x", T>`:
+
+```cpp
+struct Config {
+  rfl::Positional<std::string> input_file;
+  rfl::Short<"o", std::string> output_dir;
+  rfl::Short<"v", bool> verbose;
+  int count;
+};
+
+// ./app data.csv -o /tmp/out -v --count=10
+```
+
+Nested structs, `std::optional`, `std::vector`, enums, `rfl::Flatten` and `rfl::Rename` are all supported. Refer to the [documentation](https://rfl.getml.com/cli) for details.
+
 ### Error messages
 
 reflect-cpp returns clear and comprehensive error messages:
@@ -329,6 +374,7 @@ struct Person {
       std::vector<Person>>
       children;
   float salary;
+  rfl::Deprecated<"Use Salary Instead", "Wage in dollars", std::optional<int>> wage;
 };
 
 const std::string json_schema = rfl::json::to_schema<Person>();
@@ -337,7 +383,7 @@ const std::string json_schema = rfl::json::to_schema<Person>();
 The resulting JSON schema looks like this:
 
 ```json
-{"$schema":"https://json-schema.org/draft/2020-12/schema","$ref":"#/$defs/Person","$defs":{"Person":{"type":"object","properties":{"children":{"type":"array","description":"The person's children. Pass an empty array for no children.","items":{"$ref":"#/$defs/Person"}},"email":{"type":"string","description":"Must be a proper email in the form xxx@xxx.xxx.","pattern":"^[a-zA-Z0-9._%+\\-]+@[a-zA-Z0-9.\\-]+\\.[a-zA-Z]{2,}$"},"first_name":{"type":"string"},"last_name":{"type":"string"},"salary":{"type":"number"}},"required":["children","email","first_name","last_name","salary"]}}}
+{"$schema":"https://json-schema.org/draft/2020-12/schema","$ref":"#/$defs/Person","$defs":{"Person":{"type":"object","properties":{"children":{"type":"array","description":"The person's children. Pass an empty array for no children.","items":{"$ref":"#/$defs/Person"}},"email":{"type":"string","description":"Must be a proper email in the form xxx@xxx.xxx.","pattern":"^[a-zA-Z0-9._%+\\-]+@[a-zA-Z0-9.\\-]+\\.[a-zA-Z]{2,}$"},"first_name":{"type":"string"},"last_name":{"type":"string"},"salary":{"type":"number"},"wage":{"type":"integer","description":"Wage in dollars","deprecated":true,"deprecationMessage":"Use Salary Instead"}},"required":["children","email","first_name","last_name","salary"]}}}
 ```
 
 Note that this is currently supported for JSON only, since most other formats do not support schemata in the first place.
@@ -571,6 +617,7 @@ In addition, it supports the following custom containers:
 - `rfl::Binary`: Used to express numbers in binary format.
 - `rfl::Box`: Similar to `std::unique_ptr`, but (almost) guaranteed to never be null.
 - `rfl::Bytestring`: An alias for `std::vector<std::byte>`. Supported by Avro, BSON, Cap'n Proto, CBOR, flexbuffers, msgpack and UBJSON. 
+- `rfl::Commented`: Allows you to add comments to fields (supported by YAML and XML).
 - `rfl::Generic`: A catch-all type that can represent (almost) anything.
 - `rfl::Hex`: Used to express numbers in hex format.
 - `rfl::Literal`: An explicitly enumerated string.

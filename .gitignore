@@ -45,6 +45,7 @@
 *.bson
 *.capnproto
 *.cbor
+*.cereal
 *.csv
 *.json
 *.fb
@@ -57,6 +58,7 @@
 !package.xml
 *.yml
 *.yaml
+*.yas
 
 !vcpkg.json
 !.github/**/*.yml
