@@ -36,7 +36,7 @@ if (REFLECTCPP_BOOST_SERIALIZATION)
 endif ()
 
 if (REFLECTCPP_BSON)  
-  find_dependency(bson-1.0 NAMES bson bson-1.0)
+  find_dependency(bson NAMES bson bson-1.0)
 endif ()
 
 if (REFLECTCPP_CAPNPROTO)  
@@ -65,7 +65,7 @@ endif()
 
 if (REFLECTCPP_PARQUET)
   find_dependency(Arrow)
-  find_package(Parquet QUIET)
+  find_dependency(Parquet)
 endif()
 
 if (REFLECTCPP_TOML)

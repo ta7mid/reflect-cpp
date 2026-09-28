@@ -77,6 +77,8 @@ class ReflectCppConan(ConanFile):
     def configure(self):
         if self.options.shared:
             self.options.rm_safe("fPIC")
+        if self.options.with_csv:
+            self.options["arrow"].with_csv = True
 
     def requirements(self):
         self.requires("ctre/3.9.0", transitive_headers=True)
@@ -91,7 +93,6 @@ class ReflectCppConan(ConanFile):
             self.requires("cereal/1.3.2", transitive_headers=True)
         if self.options.with_csv or self.options.with_parquet:
             self.requires("arrow/21.0.0", transitive_headers=True)
-            self.default_options["arrow/*:with_csv"] = self.options.with_csv
         if self.options.with_flatbuffers:
             self.requires("flatbuffers/24.3.25", transitive_headers=True)
         if self.options.with_msgpack:

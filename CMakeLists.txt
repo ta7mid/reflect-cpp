@@ -283,14 +283,27 @@ if (_REFLECTCPP_NEEDS_JSON_IMPL)
     endif ()
 endif ()
 
-function(set_to_first_defined_target result)
+# Links reflectcpp against one of the given targets: the first one that is the same kind of
+# library as reflectcpp (static or shared), else the first one that exists at all. Resolving
+# the name here instead of in a generator expression keeps the exported link interface clean.
+function(reflectcpp_link_one_of)
+    get_target_property(wanted_type reflectcpp TYPE)
+    set(chosen "")
     foreach(target IN LISTS ARGN)
-        if(TARGET "${target}")
-            set(${result} "${target}" PARENT_SCOPE)
-            return()
-        endif()
-    endforeach()
-    set(${result} "" PARENT_SCOPE)
+        if (TARGET "${target}")
+            get_target_property(type "${target}" TYPE)
+            if (type STREQUAL wanted_type)
+                set(chosen "${target}")
+                break()
+            elseif (NOT chosen)
+                set(chosen "${target}")
+            endif ()
+        endif ()
+    endforeach ()
+    if (NOT chosen)
+        message(FATAL_ERROR "None of these targets exist: ${ARGN}")
+    endif ()
+    target_link_libraries(reflectcpp PUBLIC "${chosen}")
 endfunction()
 
 if (REFLECTCPP_AVRO OR REFLECTCPP_CHECK_HEADERS)
@@ -330,21 +343,11 @@ if (REFLECTCPP_BSON OR REFLECTCPP_CHECK_HEADERS)
     list(APPEND REFLECT_CPP_SOURCES
         src/reflectcpp_bson.cpp
     )
-    if (
-        NOT TARGET bson::static AND
-        NOT TARGET bson::shared AND
-        NOT TARGET mongo::bson_static AND
-        NOT TARGET mongo::bson_shared
-    )
+    if (NOT TARGET bson::static AND NOT TARGET bson::shared AND NOT TARGET mongo::bson_static AND NOT TARGET mongo::bson_shared)
+        # libbson < 2.0 names its package bson-1.0 and its targets mongo::bson_*
         find_package(bson CONFIG REQUIRED NAMES bson bson-1.0)
     endif ()
-    set_to_first_defined_target(BSON_LIB
-        bson::static
-        mongo::bson_static
-        bson::shared
-        mongo::bson_shared
-    )
-    target_link_libraries(reflectcpp PUBLIC ${BSON_LIB})
+    reflectcpp_link_one_of(bson::static bson::shared mongo::bson_static mongo::bson_shared)
 endif ()
 
 if (REFLECTCPP_CAPNPROTO OR REFLECTCPP_CHECK_HEADERS)
@@ -354,8 +357,11 @@ if (REFLECTCPP_CAPNPROTO OR REFLECTCPP_CHECK_HEADERS)
     if (NOT TARGET CapnProto)
         find_package(CapnProto CONFIG REQUIRED)
     endif ()
-    # in some old versions, there is no alias target CapnProto::capnpc, fallback to capnc
-    set_to_first_defined_target(CAPNPC_LIB CapnProto::capnpc capnpc)
+    set(CAPNPC_LIB CapnProto::capnpc)
+    if (NOT TARGET CapnProto::capnpc)
+      # in some old versions, there is no alias target CapnProto::capnpc, fallback to capnc
+      set(CAPNPC_LIB capnpc)
+    endif()
     target_link_libraries(reflectcpp PUBLIC CapnProto::kj CapnProto::capnp ${CAPNPC_LIB} CapnProto::kj-gzip)
 endif ()
 
@@ -383,13 +389,8 @@ if (REFLECTCPP_CSV OR REFLECTCPP_CHECK_HEADERS)
     if (NOT TARGET Arrow)
         find_package(Arrow CONFIG REQUIRED)
     endif()
-    set_to_first_defined_target(ARROW_LIB
-        $<IF:$<BOOL:${ARROW_BUILD_STATIC}>,Arrow::arrow_static,Arrow::arrow_shared>
-        Arrow
-        arrow::arrow
-    )
-    target_link_libraries(reflectcpp PUBLIC ${ARROW_LIB})
-endif()
+    reflectcpp_link_one_of(Arrow::arrow_static Arrow::arrow_shared)
+endif ()
 
 if (REFLECTCPP_FLEXBUFFERS OR REFLECTCPP_CHECK_HEADERS)
     list(APPEND REFLECT_CPP_SOURCES
@@ -398,8 +399,7 @@ if (REFLECTCPP_FLEXBUFFERS OR REFLECTCPP_CHECK_HEADERS)
     if (NOT TARGET flatbuffers::flatbuffers)
         find_package(flatbuffers CONFIG REQUIRED)
     endif ()
-    set_to_first_defined_target(FLATBUF_LIB flatbuffers::flatbuffers flatbuffers::flatbuffers_shared)
-    target_link_libraries(reflectcpp PUBLIC ${FLATBUF_LIB})
+    reflectcpp_link_one_of(flatbuffers::flatbuffers flatbuffers::flatbuffers_shared)
 endif ()
 
 if (REFLECTCPP_MSGPACK OR REFLECTCPP_CHECK_HEADERS)
@@ -409,37 +409,22 @@ if (REFLECTCPP_MSGPACK OR REFLECTCPP_CHECK_HEADERS)
     if (NOT TARGET msgpack-c)
         find_package(msgpack-c CONFIG REQUIRED NAMES msgpack msgpack-c msgpackc)
     endif()
-    set_to_first_defined_target(MSGPACK_LIB
-        msgpack-c
-        msgpackc
-        msgpack-c-static
-    )
-    target_link_libraries(reflectcpp PUBLIC ${MSGPACK_LIB})
+    reflectcpp_link_one_of(msgpack-c msgpackc msgpack-c-static)
 endif ()
 
 if (REFLECTCPP_PARQUET OR REFLECTCPP_CHECK_HEADERS)
-    if (NOT DEFINED ARROW_LIB)
+    if (NOT TARGET Arrow)
         find_package(Arrow CONFIG REQUIRED)
-        set_to_first_defined_target(ARROW_LIB
-            $<IF:$<BOOL:${ARROW_BUILD_STATIC}>,Arrow::arrow_static,Arrow::arrow_shared>
-            Arrow
-            arrow::arrow
-        )
     endif()
-
-    if (NOT TARGET Parquet)
-        find_package(Parquet CONFIG QUIET)
+    # Conan's Arrow package also provides the Parquet targets
+    if (NOT TARGET Parquet::parquet_static AND NOT TARGET Parquet::parquet_shared)
+        find_package(Parquet CONFIG REQUIRED)
     endif()
-    set_to_first_defined_target(PARQUET_LIB
-        $<IF:$<BOOL:${ARROW_BUILD_STATIC}>,Parquet::parquet_static,Parquet::parquet_shared>
-        Parquet
-        arrow::parquet
-    )
+    reflectcpp_link_one_of(Arrow::arrow_static Arrow::arrow_shared)
+    reflectcpp_link_one_of(Parquet::parquet_static Parquet::parquet_shared)
+endif ()
 
-    target_link_libraries(reflectcpp PUBLIC ${ARROW_LIB} ${PARQUET_LIB})
-endif()
-
-if(REFLECTCPP_TOML OR REFLECTCPP_CHECK_HEADERS)
+if (REFLECTCPP_TOML OR REFLECTCPP_CHECK_HEADERS)
     list(APPEND REFLECT_CPP_SOURCES
         src/reflectcpp_toml.cpp
     )
