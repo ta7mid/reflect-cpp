@@ -6,6 +6,7 @@
 
 #include "../Result.hpp"
 #include "../always_false.hpp"
+#include "../internal/HasFromReflectionMethod.hpp"
 #include "../internal/default_if_missing_v.hpp"
 #include "../internal/has_default_val_v.hpp"
 #include "../internal/has_reflection_method_v.hpp"
@@ -34,6 +35,7 @@
 #include "ParserDefaultVal.hpp"
 #include "ParserDuration.hpp"
 #include "ParserEnum.hpp"
+#include "ParserExpected.hpp"
 #include "ParserFilepath.hpp"
 #include "ParserOptional.hpp"
 #include "ParserPair.hpp"
@@ -138,6 +140,9 @@ struct Parser {
     } else if constexpr (is_result_v<T>) {
       return ParserResult<R, W, T, ProcessorsType>::read(_r, _var);
 
+    } else if constexpr (is_expected_v<T>) {
+      return ParserExpected<R, W, T, ProcessorsType>::read(_r, _var);
+
     } else if constexpr (is_duration_v<T>) {
       using U = std::remove_cvref_t<T>;
       return ParserDuration<R, W, typename U::rep, typename U::period,
@@ -238,7 +243,11 @@ struct Parser {
         const auto wrap_in_t = [](auto&& _named_tuple) -> Result<T> {
           try {
             using NT = decltype(_named_tuple);
-            return T{std::forward<NT>(_named_tuple)};
+            if constexpr (internal::HasFromReflectionMethod<T>) {
+              return T::from_reflection(std::forward<NT>(_named_tuple));
+            } else {
+              return T{std::forward<NT>(_named_tuple)};
+            }
           } catch (std::exception& e) {
             return error(e.what());
           }
@@ -305,6 +314,9 @@ struct Parser {
 
     } else if constexpr (is_result_v<T>) {
       ParserResult<R, W, T, ProcessorsType>::write(_w, _var, _parent);
+
+    } else if constexpr (is_expected_v<T>) {
+      ParserExpected<R, W, T, ProcessorsType>::write(_w, _var, _parent);
 
     } else if constexpr (is_variant_v<T>) {
       ParserVariant<R, W, T, ProcessorsType>::write(_w, _var, _parent);
@@ -488,6 +500,9 @@ struct Parser {
 
     } else if constexpr (is_result_v<U>) {
       return ParserResult<R, W, U, ProcessorsType>::to_schema(_definitions);
+
+    } else if constexpr (is_expected_v<U>) {
+      return ParserExpected<R, W, U, ProcessorsType>::to_schema(_definitions);
 
     } else if constexpr (is_duration_v<U>) {
       return ParserDuration<R, W, typename U::rep, typename U::period,

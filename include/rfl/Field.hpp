@@ -7,15 +7,15 @@
 
 #include "Literal.hpp"
 #include "default.hpp"
-#include "internal/Array.hpp"
 #include "internal/StringLiteral.hpp"
 #include "internal/wrap_in_rfl_array_t.hpp"
 
 namespace rfl {
 
 /// Used to define a field in the NamedTuple with a compile-time name.
-/// A Field associates a compile-time string literal name with a value of type T.
-/// This is the building block for creating named tuples and structured data with reflection.
+/// A Field associates a compile-time string literal name with a value of type
+/// T. This is the building block for creating named tuples and structured data
+/// with reflection.
 /// @tparam _name The compile-time string literal name of the field
 /// @tparam T The type of the value stored in the field
 template <internal::StringLiteral _name, class T>
@@ -117,6 +117,14 @@ struct Field {
   /// @return Const reference to the stored value
   const Type& operator()() const noexcept { return value_; }
 
+  /// Pointer to the underlying value.
+  /// @return Pointer to the stored value
+  Type* operator->() noexcept { return &value_; }
+
+  /// Pointer to the underlying value (const).
+  /// @return Const pointer to the stored value
+  const Type* operator->() const noexcept { return &value_; }
+
   /// Assigns a new value to the field.
   /// @param _value The value to assign
   /// @return Reference to this field
@@ -197,16 +205,6 @@ struct Field {
   /// The underlying value.
   Type value_;
 };
-
-template <internal::StringLiteral _name, class T>
-inline auto make_field(T&& _value) {
-  using T0 = std::remove_cvref_t<T>;
-  if constexpr (std::is_array_v<T0>) {
-    return Field<_name, T0>(internal::Array<T0>(std::forward<T>(_value)));
-  } else {
-    return Field<_name, T0>(std::forward<T>(_value));
-  }
-}
 
 }  // namespace rfl
 

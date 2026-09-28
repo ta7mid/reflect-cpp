@@ -7,9 +7,11 @@
 #include "../Result.hpp"
 #include "../config.hpp"
 #include "../enums.hpp"
+#include "../internal/enum_names_only_v.hpp"
+#include "../internal/enums/is_flag_enum.hpp"
+#include "../internal/enums/is_scoped_enum.hpp"
 #include "../internal/has_reflector.hpp"
 #include "../internal/underlying_enums_v.hpp"
-#include "../thirdparty/enchantum/enchantum.hpp"
 #include "AreReaderAndWriter.hpp"
 #include "Parent.hpp"
 #include "Parser_base.hpp"
@@ -52,14 +54,15 @@ struct ParserEnum {
 
     } else if constexpr (internal::underlying_enums_v<ProcessorsType> ||
                          schemaful::IsSchemafulReader<R>) {
-      static_assert(enchantum::ScopedEnum<T>,
+      static_assert(internal::enums::is_scoped_enum<T>,
                     "The enum must be a scoped enum in order to retrieve "
                     "the underlying value.");
       return _r.template to_basic_type<std::underlying_type_t<T>>(_var)
           .transform([](const auto _val) { return static_cast<T>(_val); });
     } else {
       return _r.template to_basic_type<std::string>(_var).and_then(
-          rfl::string_to_enum<T>);
+          rfl::string_to_enum<T, internal::enum_names_only_v<
+              ProcessorsType>>);
     }
   }
 
@@ -111,7 +114,7 @@ struct ParserEnum {
     if constexpr (internal::underlying_enums_v<ProcessorsType> ||
                   schemaful::IsSchemafulReader<R>) {
       return Type{Type::Integer{}};
-    } else if constexpr (enchantum::is_bitflag<U>) {
+    } else if constexpr (internal::enums::is_flag_enum<U>) {
       return Type{Type::String{}};
     } else if constexpr (config::enum_descriptions<U>::has_descriptions) {
       // Generate DescribedLiteral for enums with descriptions
